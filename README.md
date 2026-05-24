@@ -21,6 +21,7 @@ The viewer is built from the supplied dimension drawings and supports manual rot
 - USB bottom clearance: 1 mm
 - USB horizontal margins: 11 / 13 / 11 mm
 - Screw holes/posts: 4 x PM2.0 x 5 mm
+- Open C-shaped Picatinny slot: upper width 21.4 mm, lower opening 16.0 mm, slot height 5.8 mm, 45 degree bevels
 
 ### Ring clamp
 
@@ -28,7 +29,7 @@ The viewer is built from the supplied dimension drawings and supports manual rot
 - Inner diameter: Ø31 mm
 - Wall thickness: 2 mm
 - External depth: 9 mm
-- Top Picatinny-style clasp aligned to the case height
+- Open C-shaped Picatinny slot matches the case: upper width 21.4 mm, lower opening 16.0 mm, slot height 5.8 mm, 45 degree bevels
 
 ## Features
 

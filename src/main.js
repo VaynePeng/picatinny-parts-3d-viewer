@@ -143,22 +143,36 @@ const specs = {
     ['USB 槽', '宽 13 / 高 4.5 / 底边 1 mm'],
     ['USB 左右边距', '11 / 13 / 11 mm'],
     ['螺丝孔/柱', '4 × PM2.0 × 5 mm'],
-    ['顶部卡扣', '21±0.2 / 11±0.2 / 高 5.6±0.2'],
+    ['开口 C 形导轨槽', '上宽 21.4 / 下口 16.0 / 高 5.8 / 45°'],
   ],
   ring: [
     ['环夹外径', 'Ø35 mm'],
     ['环夹内径', 'Ø31 mm'],
     ['壁厚', '2 mm'],
     ['外部深度', '9 mm'],
-    ['顶部卡扣', '与盒体一致的皮卡卡扣'],
+    ['开口 C 形导轨槽', '上宽 21.4 / 下口 16.0 / 高 5.8 / 45°'],
   ],
   both: [
     ['外壳', '35 × 35 × 9 mm'],
     ['环夹', 'Ø35 / Ø31 × 9 mm'],
     ['USB/螺丝', '13 × 4.5 槽，4 × PM2.0 × 5'],
-    ['卡扣', '同向对齐，便于比较接口形态'],
+    ['开口 C 形导轨槽', '同规格，便于比较接口形态'],
   ],
 }
+
+const PICATINNY_SLOT = Object.freeze({
+  topWidth: 21.4,
+  lowerOpening: 16.0,
+  height: 5.8,
+  depth: 9,
+  bevelAngle: 45,
+  lipRise: (21.4 - 16.0) / 2,
+  baseHeight: 1.35,
+  topChamfer: 1.3,
+  hookShoulder: 1.25,
+  localBottomY: 17.0,
+  modelBottomY: 17.5,
+})
 
 function roundedRectShape(width, height, radius) {
   const w = (width * MM) / 2
@@ -231,6 +245,46 @@ function makeBox(width, height, depth, material = materials.shell) {
   mesh.receiveShadow = true
   addEdges(mesh, 0.18)
   return mesh
+}
+
+function makeProfileMesh(points, depth, material = materials.shell) {
+  const shape = new THREE.Shape()
+  shape.moveTo(points[0].x * MM, points[0].y * MM)
+  for (const point of points.slice(1)) {
+    shape.lineTo(point.x * MM, point.y * MM)
+  }
+  shape.closePath()
+
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: depth * MM,
+    bevelEnabled: true,
+    bevelThickness: 0.08 * MM,
+    bevelSize: 0.08 * MM,
+    bevelSegments: 2,
+    curveSegments: 4,
+  })
+  geometry.translate(0, 0, (-depth * MM) / 2)
+
+  const mesh = new THREE.Mesh(geometry, material)
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  addEdges(mesh, 0.18)
+  return mesh
+}
+
+function makeProfileLine(points, z, color = 0x2d2a26) {
+  const vectors = points.map((point) => new THREE.Vector3(point.x * MM, point.y * MM, z * MM))
+  vectors.push(vectors[0].clone())
+  const geometry = new THREE.BufferGeometry().setFromPoints(vectors)
+  const line = new THREE.Line(
+    geometry,
+    new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.72,
+    }),
+  )
+  return line
 }
 
 function makeCylinder(radius, depth, material, segments = 96) {
@@ -369,37 +423,92 @@ function visibleMeshBox() {
   return box
 }
 
-function makePicatinnyRail(width = 33, depth = 9) {
+function makePicatinnyOpenCSlot(width = 35, depth = 9) {
   const group = new THREE.Group()
   const railMat = materials.shell
-  const base = makeBox(width, 1.3, depth, railMat)
-  base.position.y = 17.15 * MM
-  group.add(base)
 
-  const postW = 5.4
-  const innerGap = 21
-  const leftX = -innerGap / 2 - postW / 2
-  const rightX = innerGap / 2 + postW / 2
-  for (const x of [leftX, rightX]) {
-    const upright = makeBox(postW, 5.6, depth, railMat)
-    upright.position.set(x * MM, 20.1 * MM, 0)
-    group.add(upright)
+  const outerHalf = width / 2
+  const topHalf = PICATINNY_SLOT.topWidth / 2
+  const lowerHalf = PICATINNY_SLOT.lowerOpening / 2
+  const bottomY = PICATINNY_SLOT.localBottomY
+  const floorY = bottomY + PICATINNY_SLOT.baseHeight
+  const bearingTopY = floorY + PICATINNY_SLOT.lipRise
+  const topY = bottomY + PICATINNY_SLOT.height
+  const shoulderY = topY - PICATINNY_SLOT.topChamfer
+  const hookNeckY = topY - PICATINNY_SLOT.hookShoulder
 
-    const cap = makeBox(7.2, 1.45, depth, railMat)
-    cap.position.set((x + (x < 0 ? 1.8 : -1.8)) * MM, 22.25 * MM, 0)
-    group.add(cap)
+  const openClampBody = makeProfileMesh([
+    { x: -topHalf, y: topY },
+    { x: -topHalf - 2.15, y: topY },
+    { x: -outerHalf + PICATINNY_SLOT.topChamfer, y: topY },
+    { x: -outerHalf, y: shoulderY },
+    { x: -outerHalf, y: bottomY + 0.85 },
+    { x: -outerHalf + 1.15, y: bottomY },
+    { x: -lowerHalf, y: bottomY },
+    { x: lowerHalf, y: bottomY },
+    { x: outerHalf - 1.15, y: bottomY },
+    { x: outerHalf, y: bottomY + 0.85 },
+    { x: outerHalf, y: shoulderY },
+    { x: outerHalf - PICATINNY_SLOT.topChamfer, y: topY },
+    { x: topHalf + 2.15, y: topY },
+    { x: topHalf, y: topY },
+    { x: topHalf + 1.25, y: hookNeckY },
+    { x: topHalf, y: bearingTopY },
+    { x: lowerHalf, y: floorY },
+    { x: lowerHalf, y: floorY },
+    { x: -lowerHalf, y: floorY },
+    { x: -topHalf, y: bearingTopY },
+    { x: -topHalf - 1.25, y: hookNeckY },
+  ], depth, railMat)
+  group.add(openClampBody)
 
-    const innerLip = makeBox(3.1, 1.45, depth, railMat)
-    innerLip.position.set((x + (x < 0 ? 3.25 : -3.25)) * MM, 19.0 * MM, 0)
-    innerLip.rotation.z = (x < 0 ? -1 : 1) * Math.PI * 0.17
-    group.add(innerLip)
-  }
-
-  const darkSlot = makeBox(18, 0.5, depth + 0.12, materials.cut)
-  darkSlot.position.set(0, 20.7 * MM, 0)
-  group.add(darkSlot)
+  const cavityProfile = [
+    { x: -lowerHalf, y: floorY },
+    { x: -topHalf, y: bearingTopY },
+    { x: -topHalf - 1.25, y: hookNeckY },
+    { x: -topHalf, y: topY },
+    { x: topHalf, y: topY },
+    { x: topHalf + 1.25, y: hookNeckY },
+    { x: topHalf, y: bearingTopY },
+    { x: lowerHalf, y: floorY },
+  ]
+  group.add(makeProfileLine(cavityProfile, depth / 2 + 0.08))
+  group.add(makeProfileLine(cavityProfile, -depth / 2 - 0.08))
 
   return group
+}
+
+function addPicatinnySlotAnnotations() {
+  const bottomY = PICATINNY_SLOT.modelBottomY
+  const floorY = bottomY + PICATINNY_SLOT.baseHeight
+  const topY = bottomY + PICATINNY_SLOT.height
+  const bearingTopY = floorY + PICATINNY_SLOT.lipRise
+  const topHalf = PICATINNY_SLOT.topWidth / 2
+  const lowerHalf = PICATINNY_SLOT.lowerOpening / 2
+
+  dimensionBar(
+    { x: -topHalf, y: topY + 1.4, z: 5.4 },
+    { x: topHalf, y: topY + 1.4, z: 5.4 },
+    `上宽 ${PICATINNY_SLOT.topWidth.toFixed(1)} mm`,
+    { y: -1 },
+  )
+  dimensionBar(
+    { x: -lowerHalf, y: floorY - 0.9, z: 5.4 },
+    { x: lowerHalf, y: floorY - 0.9, z: 5.4 },
+    `下口 ${PICATINNY_SLOT.lowerOpening.toFixed(1)} mm`,
+    { y: 1 },
+  )
+  dimensionBar(
+    { x: 12.8, y: bottomY, z: 5.7 },
+    { x: 12.8, y: topY, z: 5.7 },
+    `槽高 ${PICATINNY_SLOT.height.toFixed(1)} mm`,
+    { x: -1 },
+  )
+  dimensionLine(
+    { x: -topHalf, y: bearingTopY, z: 5.9 },
+    { x: -lowerHalf, y: floorY, z: 5.9 },
+    `${PICATINNY_SLOT.bevelAngle}° 斜面`,
+  )
 }
 
 function createCaseModel() {
@@ -463,7 +572,7 @@ function createCaseModel() {
     }
   }
 
-  const rail = makePicatinnyRail(35, 9)
+  const rail = makePicatinnyOpenCSlot(35, 9)
   rail.position.y = 0.5 * MM
   group.add(rail)
 
@@ -471,6 +580,7 @@ function createCaseModel() {
     dimensionBar({ x: -17.5, y: -20.8, z: 5.2 }, { x: 17.5, y: -20.8, z: 5.2 }, '正面宽 35 mm', { y: 1 })
     dimensionBar({ x: 20.6, y: -17.5, z: 5.2 }, { x: 20.6, y: 17.5, z: 5.2 }, '正面高 35 mm', { x: -1 })
     label('前面圆孔 Ø16', { x: 0, y: 0, z: 8.7 })
+    addPicatinnySlotAnnotations()
   })
   withAnnotationSide('left', () => {
     dimensionBar({ x: -20.2, y: 0, z: -4.5 }, { x: -20.2, y: 0, z: 4.5 }, '外部深度 9 mm', { x: 1 })
@@ -487,9 +597,6 @@ function createCaseModel() {
     callout('USB 13 × 4.5 / 底 1 mm', { x: -12.4, y: -9.2, z: -8.4 })
     callout('4 × 螺丝孔 PM2.0 × 5 mm', { x: 0, y: 15.6, z: -8.2 })
     callout('内部边长 33 × 33 mm', { x: 0, y: 0, z: -8.6 })
-  })
-  withAnnotationSide('top', () => {
-    callout('卡扣：21±0.2 / 11±0.2 / 高 5.6±0.2，斜角 45°', { x: 0, y: 25.9, z: 1.5 })
   })
   activeAnnotationTarget = labelRoot
   return group
@@ -559,13 +666,9 @@ function createRingModel() {
   const saddle = makeRingSaddle()
   group.add(saddle)
 
-  const rail = makePicatinnyRail(35, 9)
+  const rail = makePicatinnyOpenCSlot(35, 9)
   rail.position.y = 0.5 * MM
   group.add(rail)
-
-  const relief = makeBox(20.4, 1.2, 9.25, materials.cut)
-  relief.position.y = 18.15 * MM
-  group.add(relief)
 
   for (const x of [-13.4, 13.4]) {
     const shoulderGroove = makeBox(0.55, 5.2, 9.18, materials.cut)
@@ -578,12 +681,10 @@ function createRingModel() {
     dimensionBar({ x: -17.5, y: -21.7, z: 5.4 }, { x: 17.5, y: -21.7, z: 5.4 }, '外径 35 mm', { y: 1 })
     dimensionBar({ x: -15.5, y: -1.2, z: 5.8 }, { x: 15.5, y: -1.2, z: 5.8 }, '内径 31 mm', { y: 1 })
     dimensionBar({ x: 15.5, y: 9.4, z: 5.8 }, { x: 17.5, y: 9.4, z: 5.8 }, '壁厚 2 mm', { y: 1 })
+    addPicatinnySlotAnnotations()
   })
   withAnnotationSide('right', () => {
     dimensionBar({ x: 21.2, y: -4.5, z: -4.5 }, { x: 21.2, y: -4.5, z: 4.5 }, '外部深度 9 mm', { x: -1 })
-  })
-  withAnnotationSide('top', () => {
-    callout('顶部皮卡卡扣，顶部高度与盒体一致，深度 9 mm', { x: 0, y: 24.0, z: 1.8 })
   })
   activeAnnotationTarget = labelRoot
   return group
