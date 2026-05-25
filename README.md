@@ -73,6 +73,20 @@ Preview production build:
 npm run preview
 ```
 
+Export STL files:
+
+```bash
+python3 scripts/export_stl.py
+```
+
+Generated files:
+
+```text
+stl/case-shell.stl
+stl/ring-clamp.stl
+```
+
 ## Notes
 
 This is a visual engineering reference model, not a manufacturing-ready CAD file. Dimensions and shapes should be checked against real hardware before printing or machining.
+The STL export script rebuilds the parts as watertight solids from the documented dimensions, so the printable meshes are an engineering approximation rather than a direct dump of the viewer scene.
