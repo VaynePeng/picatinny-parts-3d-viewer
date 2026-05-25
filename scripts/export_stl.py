@@ -150,7 +150,7 @@ def centered_text_polygon(text: str, target_width: float):
 
 def make_logo_meshes() -> list[trimesh.Trimesh]:
     logo_shape = centered_text_polygon(CASE_LOGO_TEXT, CASE_LOGO_MAIN_TARGET_WIDTH)
-    logo_shape = shapely_scale(logo_shape, xfact=-1.0, yfact=-1.0, origin=(0.0, 0.0))
+    logo_shape = shapely_scale(logo_shape, xfact=-1.0, yfact=1.0, origin=(0.0, 0.0))
     logo_shape = shapely_translate(logo_shape, yoff=CASE_LOGO_CENTER_Y)
     return [
         extrude_polygon(
@@ -165,10 +165,17 @@ def make_logo_mesh() -> trimesh.Trimesh:
     return concatenate(make_logo_meshes())
 
 
-def orient_mesh_for_print(mesh: trimesh.Trimesh, *, flip_z: bool = False) -> trimesh.Trimesh:
+def orient_mesh_for_print(
+    mesh: trimesh.Trimesh,
+    *,
+    flip_z: bool = False,
+    rotate_z_180: bool = False,
+) -> trimesh.Trimesh:
     oriented = mesh.copy()
     if flip_z:
         oriented.apply_transform(trimesh.transformations.rotation_matrix(math.pi, [1.0, 0.0, 0.0]))
+    if rotate_z_180:
+        oriented.apply_transform(trimesh.transformations.rotation_matrix(math.pi, [0.0, 0.0, 1.0]))
     oriented.apply_translation([0.0, 0.0, -float(oriented.bounds[0][2])])
     return oriented
 
@@ -445,7 +452,7 @@ def create_case_back_half() -> trimesh.Trimesh:
 
 def create_case_shell() -> trimesh.Trimesh:
     front = orient_mesh_for_print(create_case_front_half())
-    back = orient_mesh_for_print(create_case_back_half(), flip_z=True)
+    back = orient_mesh_for_print(create_case_back_half(), flip_z=True, rotate_z_180=True)
     front.apply_translation([-24.0, 0.0, 0.0])
     back.apply_translation([24.0, 0.0, 0.0])
     return concatenate([front, back])
@@ -507,7 +514,7 @@ def export_part(name: str, mesh: trimesh.Trimesh) -> None:
 
 def main() -> None:
     case_front = orient_mesh_for_print(create_case_front_half())
-    case_back = orient_mesh_for_print(create_case_back_half(), flip_z=True)
+    case_back = orient_mesh_for_print(create_case_back_half(), flip_z=True, rotate_z_180=True)
     export_part("case-shell-front", case_front)
     export_part("case-shell-back", case_back)
     export_part("case-shell", create_case_shell())
