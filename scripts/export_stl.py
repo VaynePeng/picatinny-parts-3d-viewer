@@ -1,23 +1,67 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
+import numpy as np
 import trimesh
+from matplotlib.font_manager import FontProperties
+from matplotlib.textpath import TextPath
+from shapely.affinity import scale as shapely_scale, translate as shapely_translate
 from shapely.geometry import Point, Polygon, box
+from shapely.ops import unary_union
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT / "stl"
 ENGINE = "manifold"
+CASE_OUTER_SIZE = 35.0
+CASE_OUTER_RADIUS = 2.2
+CASE_INNER_SIZE = 33.0
+CASE_INNER_RADIUS = 1.4
+CASE_TOTAL_DEPTH = 9.0
+CASE_HALF_DEPTH = CASE_TOTAL_DEPTH / 2
+CASE_INTERNAL_DEPTH = 7.0
+CASE_HALF_CAVITY_DEPTH = CASE_INTERNAL_DEPTH / 2
+CASE_FRONT_FACE_THICKNESS = 1.0
+CASE_BACK_FACE_THICKNESS = 1.0
+CASE_FRONT_SPLIT_Z = 0.0
+CASE_USB_CENTER_Y = -14.25
+CASE_USB_WIDTH = 13.0
+CASE_USB_HEIGHT = 4.5
+CASE_SCREW_POINTS = (-13.1, 13.1)
+CASE_POST_RADIUS = 2.15
+CASE_SCREW_CLEARANCE_RADIUS = 1.05
+CASE_SCREW_HEAD_RADIUS = 2.2
+CASE_SCREW_HEAD_RECESS_DEPTH = 0.6
+CASE_SCREW_LENGTH = 5.0
+CASE_SCREW_PILOT_RADIUS = 0.85
+CASE_POST_HEIGHT = 4.0
+CASE_POST_CENTER_Z = -2.0
+CASE_POST_PILOT_HEIGHT = 3.6
+CASE_POST_PILOT_CENTER_Z = -1.8
+CASE_THREAD_PITCH = 0.4
+CASE_THREAD_MAJOR_RADIUS = 1.0
+CASE_THREAD_MINOR_RADIUS = 0.78
+CASE_THREAD_RADIAL_CLEARANCE = 0.05
+CASE_LOGO_TEXT = "Shotmind"
+CASE_LOGO_SUBTEXT = "v0"
+CASE_LOGO_HEIGHT = 0.6
+CASE_LOGO_MAIN_TARGET_WIDTH = 22.0
+CASE_LOGO_SUB_TARGET_WIDTH = 5.5
+CASE_LOGO_CENTER_Y = 1.2
+CASE_LOGO_SUB_OFFSET_Y = -5.0
+CASE_LOGO_FONT_FAMILY = "DejaVu Sans"
+CASE_LOGO_FONT_WEIGHT = "bold"
 
 PICATINNY = {
-    "top_width": 21.4,
-    "lower_opening": 16.0,
-    "height": 5.8,
+    "block_height": 5.8,
+    "middle_cavity_width": 21.0,
+    "bevel_size": 2.0,
+    "lower_vertical": 1.0,
+    "roof_thickness": 1.0,
+    "outer_chamfer": 2.0,
     "depth": 9.0,
-    "top_chamfer": 1.3,
-    "hook_shoulder": 1.25,
-    "base_height": 1.35,
-    "local_bottom_y": 17.0,
+    "bottom_y": 17.5,
 }
 
 
@@ -35,6 +79,9 @@ def circle(radius: float, resolution: int = 64):
 
 
 def extrude_polygon(poly, height: float, *, z_min: float) -> trimesh.Trimesh:
+    if hasattr(poly, "geoms"):
+        parts = [extrude_polygon(geom, height, z_min=z_min) for geom in poly.geoms if not geom.is_empty]
+        return finalize(trimesh.util.concatenate(parts))
     mesh = trimesh.creation.extrude_polygon(poly, height)
     mesh.apply_translation([0.0, 0.0, z_min])
     return mesh
@@ -80,67 +127,362 @@ def finalize(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     return mesh
 
 
-def picatinny_slot(width: float = 35.0, depth: float = 9.0) -> trimesh.Trimesh:
-    outer_half = width / 2
-    top_half = PICATINNY["top_width"] / 2
-    lower_half = PICATINNY["lower_opening"] / 2
-    bottom_y = PICATINNY["local_bottom_y"]
-    floor_y = bottom_y + PICATINNY["base_height"]
-    lip_rise = (PICATINNY["top_width"] - PICATINNY["lower_opening"]) / 2
-    bearing_top_y = floor_y + lip_rise
-    top_y = bottom_y + PICATINNY["height"]
-    shoulder_y = top_y - PICATINNY["top_chamfer"]
-    hook_neck_y = top_y - PICATINNY["hook_shoulder"]
+def concatenate(meshes: list[trimesh.Trimesh]) -> trimesh.Trimesh:
+    return trimesh.util.concatenate(meshes)
 
-    profile = Polygon(
-        [
-            (-top_half, top_y),
-            (-top_half - 2.15, top_y),
-            (-outer_half + PICATINNY["top_chamfer"], top_y),
-            (-outer_half, shoulder_y),
-            (-outer_half, bottom_y + 0.85),
-            (-outer_half + 1.15, bottom_y),
-            (-lower_half, bottom_y),
-            (lower_half, bottom_y),
-            (outer_half - 1.15, bottom_y),
-            (outer_half, bottom_y + 0.85),
-            (outer_half, shoulder_y),
-            (outer_half - PICATINNY["top_chamfer"], top_y),
-            (top_half + 2.15, top_y),
-            (top_half, top_y),
-            (top_half + 1.25, hook_neck_y),
-            (top_half, bearing_top_y),
-            (lower_half, floor_y),
-            (-lower_half, floor_y),
-            (-top_half, bearing_top_y),
-            (-top_half - 1.25, hook_neck_y),
-        ]
+
+def _text_to_shapely(text: str, font_size: float = 10.0):
+    fp = FontProperties(family=CASE_LOGO_FONT_FAMILY, weight=CASE_LOGO_FONT_WEIGHT)
+    text_path = TextPath((0.0, 0.0), text, size=font_size, prop=fp)
+    rings = [ring for ring in text_path.to_polygons(closed_only=True) if len(ring) >= 3]
+    raw_polys = [Polygon(ring) for ring in rings]
+    raw_polys.sort(key=lambda p: p.area, reverse=True)
+    used = [False] * len(raw_polys)
+    final_polys = []
+    for i, outer in enumerate(raw_polys):
+        if used[i]:
+            continue
+        rep_outer = outer.representative_point()
+        depth_outer = sum(
+            1
+            for j, other in enumerate(raw_polys)
+            if j != i and other.contains(rep_outer)
+        )
+        if depth_outer % 2 != 0:
+            continue
+        holes = []
+        for j, inner in enumerate(raw_polys):
+            if j == i or used[j]:
+                continue
+            rep_inner = inner.representative_point()
+            if not outer.contains(rep_inner):
+                continue
+            depth_inner = sum(
+                1
+                for k, other in enumerate(raw_polys)
+                if k != j and other.contains(rep_inner)
+            )
+            if depth_inner == depth_outer + 1:
+                holes.append(list(inner.exterior.coords))
+                used[j] = True
+        final_polys.append(Polygon(outer.exterior.coords, holes=holes))
+        used[i] = True
+    return unary_union(final_polys)
+
+
+def centered_text_polygon(text: str, target_width: float):
+    shape = _text_to_shapely(text, font_size=10.0)
+    min_x, min_y, max_x, max_y = shape.bounds
+    current_width = max_x - min_x
+    scale = target_width / current_width
+    shape = shapely_scale(shape, xfact=scale, yfact=scale, origin=(0.0, 0.0))
+    min_x, min_y, max_x, max_y = shape.bounds
+    return shapely_translate(shape, xoff=-(min_x + max_x) / 2, yoff=-(min_y + max_y) / 2)
+
+
+def make_logo_meshes() -> list[trimesh.Trimesh]:
+    main_text = centered_text_polygon(CASE_LOGO_TEXT, CASE_LOGO_MAIN_TARGET_WIDTH)
+    sub_text = centered_text_polygon(CASE_LOGO_SUBTEXT, CASE_LOGO_SUB_TARGET_WIDTH)
+    sub_text = shapely_translate(sub_text, yoff=CASE_LOGO_SUB_OFFSET_Y)
+    logo_shape = unary_union([main_text, sub_text])
+    logo_shape = shapely_translate(logo_shape, yoff=CASE_LOGO_CENTER_Y)
+    return [
+        extrude_polygon(
+            logo_shape,
+            CASE_LOGO_HEIGHT,
+            z_min=-CASE_HALF_DEPTH - CASE_LOGO_HEIGHT,
+        )
+    ]
+
+
+def make_logo_mesh() -> trimesh.Trimesh:
+    return concatenate(make_logo_meshes())
+
+
+def orient_mesh_for_print(mesh: trimesh.Trimesh, *, flip_z: bool = False) -> trimesh.Trimesh:
+    oriented = mesh.copy()
+    if flip_z:
+        oriented.apply_transform(trimesh.transformations.rotation_matrix(math.pi, [1.0, 0.0, 0.0]))
+    oriented.apply_translation([0.0, 0.0, -float(oriented.bounds[0][2])])
+    return oriented
+
+
+def metric_thread_radius(
+    phase: float,
+    pitch: float,
+    root_radius: float,
+    crest_radius: float,
+) -> float:
+    u = (phase / pitch) % 1.0
+    if u < 0.125:
+        factor = 0.0
+    elif u < 0.375:
+        factor = (u - 0.125) / 0.25
+    elif u < 0.625:
+        factor = 1.0
+    elif u < 0.875:
+        factor = 1.0 - (u - 0.625) / 0.25
+    else:
+        factor = 0.0
+    return root_radius + factor * (crest_radius - root_radius)
+
+
+def make_threaded_hole_tool(
+    height: float,
+    *,
+    pitch: float = CASE_THREAD_PITCH,
+    major_radius: float = CASE_THREAD_MAJOR_RADIUS,
+    minor_radius: float = CASE_THREAD_MINOR_RADIUS,
+    radial_clearance: float = CASE_THREAD_RADIAL_CLEARANCE,
+    theta_segments: int = 60,
+) -> trimesh.Trimesh:
+    crest_radius = major_radius + radial_clearance
+    root_radius = minor_radius + radial_clearance * 0.4
+    z_segments = max(72, int(math.ceil(height / pitch * 18)))
+    thetas = np.linspace(0.0, math.tau, theta_segments, endpoint=False)
+    zs = np.linspace(-height / 2, height / 2, z_segments + 1)
+
+    vertices: list[list[float]] = []
+    for z in zs:
+        lead_scale = min(
+            (z + height / 2) / max(pitch, 1e-6),
+            (height / 2 - z) / max(pitch, 1e-6),
+            1.0,
+        )
+        lead_scale = max(0.0, min(1.0, lead_scale))
+        for theta in thetas:
+            phase = (z - pitch * theta / math.tau) % pitch
+            radius = metric_thread_radius(phase, pitch, root_radius, crest_radius)
+            radius = root_radius + (radius - root_radius) * lead_scale
+            vertices.append([radius * math.cos(theta), radius * math.sin(theta), z])
+
+    bottom_center = len(vertices)
+    vertices.append([0.0, 0.0, -height / 2])
+    top_center = len(vertices)
+    vertices.append([0.0, 0.0, height / 2])
+
+    faces: list[list[int]] = []
+    ring_count = len(zs)
+    for ring_index in range(ring_count - 1):
+        ring_start = ring_index * theta_segments
+        next_ring_start = (ring_index + 1) * theta_segments
+        for segment_index in range(theta_segments):
+            a = ring_start + segment_index
+            b = ring_start + (segment_index + 1) % theta_segments
+            c = next_ring_start + segment_index
+            d = next_ring_start + (segment_index + 1) % theta_segments
+            faces.append([a, c, b])
+            faces.append([b, c, d])
+
+    for segment_index in range(theta_segments):
+        a = segment_index
+        b = (segment_index + 1) % theta_segments
+        faces.append([bottom_center, b, a])
+
+    top_ring_start = (ring_count - 1) * theta_segments
+    for segment_index in range(theta_segments):
+        a = top_ring_start + segment_index
+        b = top_ring_start + (segment_index + 1) % theta_segments
+        faces.append([top_center, a, b])
+
+    mesh = trimesh.Trimesh(
+        vertices=np.asarray(vertices, dtype=float),
+        faces=np.asarray(faces, dtype=np.int64),
+        process=True,
     )
-    slot = extrude_polygon(profile, depth, z_min=-depth / 2)
-    slot.apply_translation([0.0, 0.5, 0.0])
-    return slot
+    mesh.fix_normals()
+    return finalize(mesh)
+
+
+def picatinny_block(width: float = 35.0, depth: float = 9.0, z_center: float = 0.0) -> trimesh.Trimesh:
+    bottom_y = PICATINNY["bottom_y"]
+    block_height = PICATINNY["block_height"]
+    return make_box(width, block_height, depth, (0.0, bottom_y + block_height / 2, z_center))
+
+
+def picatinny_cutters(width: float = 35.0, depth: float = 9.0, z_center: float = 0.0) -> list[trimesh.Trimesh]:
+    bottom_y = PICATINNY["bottom_y"]
+    block_height = PICATINNY["block_height"]
+    bevel_size = PICATINNY["bevel_size"]
+    middle_half = PICATINNY["middle_cavity_width"] / 2
+    opening_half = middle_half - bevel_size
+    outer_half = width / 2
+    outer_chamfer = PICATINNY["outer_chamfer"]
+    top_y = bottom_y + block_height
+    cavity_floor_y = bottom_y - PICATINNY["lower_vertical"]
+    cavity_top_y = top_y - PICATINNY["roof_thickness"]
+    lower_bevel_top_y = bottom_y + bevel_size
+    upper_bevel_bottom_y = cavity_top_y - bevel_size
+    cavity = extrude_polygon(
+        Polygon(
+            [
+                (-opening_half, cavity_floor_y),
+                (-opening_half, bottom_y),
+                (-middle_half, lower_bevel_top_y),
+                (-middle_half, upper_bevel_bottom_y),
+                (-opening_half, cavity_top_y),
+                (opening_half, cavity_top_y),
+                (middle_half, upper_bevel_bottom_y),
+                (middle_half, lower_bevel_top_y),
+                (opening_half, bottom_y),
+                (opening_half, cavity_floor_y),
+            ]
+        ),
+        depth + 0.8,
+        z_min=-(depth + 0.8) / 2,
+    )
+    cavity.apply_translation([0.0, 0.0, z_center])
+    top_opening = extrude_polygon(
+        box(-opening_half, cavity_top_y, opening_half, top_y),
+        depth + 0.8,
+        z_min=-(depth + 0.8) / 2,
+    )
+    top_opening.apply_translation([0.0, 0.0, z_center])
+    left_outer_chamfers = [
+        extrude_polygon(
+            Polygon(
+                [
+                    (-outer_half, top_y),
+                    (-outer_half + outer_chamfer, top_y),
+                    (-outer_half, top_y - outer_chamfer),
+                ]
+            ),
+            depth + 0.8,
+            z_min=-(depth + 0.8) / 2,
+        ),
+        extrude_polygon(
+            Polygon(
+                [
+                    (-outer_half, bottom_y),
+                    (-outer_half + outer_chamfer, bottom_y),
+                    (-outer_half, bottom_y + outer_chamfer),
+                ]
+            ),
+            depth + 0.8,
+            z_min=-(depth + 0.8) / 2,
+        ),
+    ]
+    for cutter in left_outer_chamfers:
+        cutter.apply_translation([0.0, 0.0, z_center])
+    right_outer_chamfers = [
+        extrude_polygon(
+            Polygon(
+                [
+                    (outer_half, top_y),
+                    (outer_half - outer_chamfer, top_y),
+                    (outer_half, top_y - outer_chamfer),
+                ]
+            ),
+            depth + 0.8,
+            z_min=-(depth + 0.8) / 2,
+        ),
+        extrude_polygon(
+            Polygon(
+                [
+                    (outer_half, bottom_y),
+                    (outer_half - outer_chamfer, bottom_y),
+                    (outer_half, bottom_y + outer_chamfer),
+                ]
+            ),
+            depth + 0.8,
+            z_min=-(depth + 0.8) / 2,
+        ),
+    ]
+    for cutter in right_outer_chamfers:
+        cutter.apply_translation([0.0, 0.0, z_center])
+    return [cavity, top_opening, *left_outer_chamfers, *right_outer_chamfers]
+
+
+def apply_picatinny_top(
+    body: trimesh.Trimesh,
+    width: float = 35.0,
+    depth: float = 9.0,
+    z_center: float = 0.0,
+) -> trimesh.Trimesh:
+    return finalize(
+        difference(
+            union([body, picatinny_block(width, depth, z_center=z_center)]),
+            picatinny_cutters(width, depth, z_center=z_center),
+        )
+    )
+
+
+def create_case_front_half() -> trimesh.Trimesh:
+    outer = extrude_polygon(
+        rounded_rect(CASE_OUTER_SIZE, CASE_OUTER_SIZE, CASE_OUTER_RADIUS),
+        CASE_HALF_DEPTH,
+        z_min=CASE_FRONT_SPLIT_Z,
+    )
+    cavity = extrude_polygon(
+        rounded_rect(CASE_INNER_SIZE, CASE_INNER_SIZE, CASE_INNER_RADIUS),
+        CASE_HALF_CAVITY_DEPTH,
+        z_min=CASE_FRONT_SPLIT_Z,
+    )
+    front_hole = make_cylinder(8.0, CASE_HALF_DEPTH + 2.0, (0.0, 0.0, CASE_HALF_DEPTH / 2), sections=128)
+
+    screw_holes = []
+    screw_head_recesses = []
+    for x in CASE_SCREW_POINTS:
+        for y in CASE_SCREW_POINTS:
+            screw_holes.append(
+                make_cylinder(
+                    CASE_SCREW_CLEARANCE_RADIUS,
+                    CASE_FRONT_FACE_THICKNESS + 0.6,
+                    (x, y, CASE_HALF_DEPTH - CASE_FRONT_FACE_THICKNESS / 2),
+                    sections=48,
+                )
+            )
+            screw_head_recesses.append(
+                make_cylinder(
+                    CASE_SCREW_HEAD_RADIUS,
+                    CASE_SCREW_HEAD_RECESS_DEPTH,
+                    (x, y, CASE_HALF_DEPTH - CASE_SCREW_HEAD_RECESS_DEPTH / 2),
+                    sections=64,
+                )
+            )
+
+    body = apply_picatinny_top(outer, depth=CASE_HALF_DEPTH, z_center=CASE_HALF_DEPTH / 2)
+    body = difference(body, [cavity, front_hole, *screw_holes, *screw_head_recesses])
+    return finalize(body)
+
+
+def create_case_back_half() -> trimesh.Trimesh:
+    outer = extrude_polygon(
+        rounded_rect(CASE_OUTER_SIZE, CASE_OUTER_SIZE, CASE_OUTER_RADIUS),
+        CASE_HALF_DEPTH,
+        z_min=-CASE_HALF_DEPTH,
+    )
+    cavity = extrude_polygon(
+        rounded_rect(CASE_INNER_SIZE, CASE_INNER_SIZE, CASE_INNER_RADIUS),
+        CASE_HALF_CAVITY_DEPTH,
+        z_min=-CASE_HALF_DEPTH + CASE_BACK_FACE_THICKNESS,
+    )
+    usb_slot = make_box(CASE_USB_WIDTH, CASE_USB_HEIGHT, 2.8, (0.0, CASE_USB_CENTER_Y, -3.1))
+    shell = apply_picatinny_top(outer, depth=CASE_HALF_DEPTH, z_center=-CASE_HALF_DEPTH / 2)
+    shell = difference(shell, [cavity, usb_slot])
+
+    posts = []
+    logo_meshes = make_logo_meshes()
+    threaded_hole_template = make_threaded_hole_tool(CASE_POST_PILOT_HEIGHT)
+    threaded_holes = []
+    for x in CASE_SCREW_POINTS:
+        for y in CASE_SCREW_POINTS:
+            posts.append(make_cylinder(CASE_POST_RADIUS, CASE_POST_HEIGHT, (x, y, CASE_POST_CENTER_Z), sections=64))
+            threaded_hole = threaded_hole_template.copy()
+            threaded_hole.apply_translation([x, y, CASE_POST_PILOT_CENTER_Z])
+            threaded_holes.append(threaded_hole)
+
+    body = union([shell, *logo_meshes, *posts])
+    body = difference(body, threaded_holes)
+    return body
 
 
 def create_case_shell() -> trimesh.Trimesh:
-    outer = extrude_polygon(rounded_rect(35.0, 35.0, 2.2), 9.0, z_min=-4.5)
-    cavity = extrude_polygon(rounded_rect(33.0, 33.0, 1.4), 7.0, z_min=-4.5)
-    front_hole = make_cylinder(8.0, 12.0, (0.0, 0.0, 0.0), sections=128)
-    usb_slot = make_box(13.0, 4.5, 4.0, (0.0, -14.25, -3.6))
-
-    base = difference(outer, [cavity, front_hole, usb_slot])
-
-    posts = []
-    pilot_holes = []
-    counterbores = []
-    for x in (-13.1, 13.1):
-        for y in (-13.1, 13.1):
-            posts.append(make_cylinder(2.15, 5.0, (x, y, -2.0), sections=64))
-            pilot_holes.append(make_cylinder(0.85, 5.6, (x, y, -1.7), sections=48))
-            counterbores.append(make_cylinder(1.35, 1.4, (x, y, -3.8), sections=48))
-
-    body = union([base, *posts, picatinny_slot()])
-    body = difference(body, [*pilot_holes, *counterbores])
-    return finalize(body)
+    front = orient_mesh_for_print(create_case_front_half())
+    back = orient_mesh_for_print(create_case_back_half())
+    front.apply_translation([-24.0, 0.0, 0.0])
+    back.apply_translation([24.0, 0.0, 0.0])
+    return concatenate([front, back])
 
 
 def saddle_polygon() -> Polygon:
@@ -172,7 +514,7 @@ def saddle_polygon() -> Polygon:
 def create_ring_clamp() -> trimesh.Trimesh:
     ring = extrude_polygon(circle(17.5).difference(circle(15.5)), 9.0, z_min=-4.5)
     saddle = extrude_polygon(saddle_polygon(), 9.0, z_min=-4.5)
-    body = union([ring, saddle, picatinny_slot()])
+    body = apply_picatinny_top(union([ring, saddle]))
 
     grooves = []
     for x, angle in ((-13.4, -0.28), (13.4, 0.28)):
@@ -198,8 +540,12 @@ def export_part(name: str, mesh: trimesh.Trimesh) -> None:
 
 
 def main() -> None:
+    case_front = orient_mesh_for_print(create_case_front_half())
+    case_back = orient_mesh_for_print(create_case_back_half())
+    export_part("case-shell-front", case_front)
+    export_part("case-shell-back", case_back)
     export_part("case-shell", create_case_shell())
-    export_part("ring-clamp", create_ring_clamp())
+    export_part("ring-clamp", orient_mesh_for_print(create_ring_clamp()))
 
 
 if __name__ == "__main__":
