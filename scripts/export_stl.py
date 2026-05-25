@@ -150,7 +150,7 @@ def centered_text_polygon(text: str, target_width: float):
 
 def make_logo_meshes() -> list[trimesh.Trimesh]:
     logo_shape = centered_text_polygon(CASE_LOGO_TEXT, CASE_LOGO_MAIN_TARGET_WIDTH)
-    logo_shape = shapely_scale(logo_shape, xfact=1.0, yfact=-1.0, origin=(0.0, 0.0))
+    logo_shape = shapely_scale(logo_shape, xfact=-1.0, yfact=-1.0, origin=(0.0, 0.0))
     logo_shape = shapely_translate(logo_shape, yoff=CASE_LOGO_CENTER_Y)
     return [
         extrude_polygon(
