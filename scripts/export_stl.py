@@ -44,12 +44,9 @@ CASE_THREAD_MAJOR_RADIUS = 1.0
 CASE_THREAD_MINOR_RADIUS = 0.78
 CASE_THREAD_RADIAL_CLEARANCE = 0.05
 CASE_LOGO_TEXT = "Shotmind"
-CASE_LOGO_SUBTEXT = "v0"
 CASE_LOGO_HEIGHT = 0.6
 CASE_LOGO_MAIN_TARGET_WIDTH = 22.0
-CASE_LOGO_SUB_TARGET_WIDTH = 5.5
-CASE_LOGO_CENTER_Y = 1.2
-CASE_LOGO_SUB_OFFSET_Y = -5.0
+CASE_LOGO_CENTER_Y = 0.0
 CASE_LOGO_FONT_FAMILY = "DejaVu Sans"
 CASE_LOGO_FONT_WEIGHT = "bold"
 
@@ -134,40 +131,11 @@ def concatenate(meshes: list[trimesh.Trimesh]) -> trimesh.Trimesh:
 def _text_to_shapely(text: str, font_size: float = 10.0):
     fp = FontProperties(family=CASE_LOGO_FONT_FAMILY, weight=CASE_LOGO_FONT_WEIGHT)
     text_path = TextPath((0.0, 0.0), text, size=font_size, prop=fp)
-    rings = [ring for ring in text_path.to_polygons(closed_only=True) if len(ring) >= 3]
-    raw_polys = [Polygon(ring) for ring in rings]
-    raw_polys.sort(key=lambda p: p.area, reverse=True)
-    used = [False] * len(raw_polys)
-    final_polys = []
-    for i, outer in enumerate(raw_polys):
-        if used[i]:
-            continue
-        rep_outer = outer.representative_point()
-        depth_outer = sum(
-            1
-            for j, other in enumerate(raw_polys)
-            if j != i and other.contains(rep_outer)
-        )
-        if depth_outer % 2 != 0:
-            continue
-        holes = []
-        for j, inner in enumerate(raw_polys):
-            if j == i or used[j]:
-                continue
-            rep_inner = inner.representative_point()
-            if not outer.contains(rep_inner):
-                continue
-            depth_inner = sum(
-                1
-                for k, other in enumerate(raw_polys)
-                if k != j and other.contains(rep_inner)
-            )
-            if depth_inner == depth_outer + 1:
-                holes.append(list(inner.exterior.coords))
-                used[j] = True
-        final_polys.append(Polygon(outer.exterior.coords, holes=holes))
-        used[i] = True
-    return unary_union(final_polys)
+    rings = [Polygon(ring) for ring in text_path.to_polygons(closed_only=True) if len(ring) >= 3]
+    shape = rings[0]
+    for ring in rings[1:]:
+        shape = shape.symmetric_difference(ring)
+    return shape
 
 
 def centered_text_polygon(text: str, target_width: float):
@@ -181,10 +149,8 @@ def centered_text_polygon(text: str, target_width: float):
 
 
 def make_logo_meshes() -> list[trimesh.Trimesh]:
-    main_text = centered_text_polygon(CASE_LOGO_TEXT, CASE_LOGO_MAIN_TARGET_WIDTH)
-    sub_text = centered_text_polygon(CASE_LOGO_SUBTEXT, CASE_LOGO_SUB_TARGET_WIDTH)
-    sub_text = shapely_translate(sub_text, yoff=CASE_LOGO_SUB_OFFSET_Y)
-    logo_shape = unary_union([main_text, sub_text])
+    logo_shape = centered_text_polygon(CASE_LOGO_TEXT, CASE_LOGO_MAIN_TARGET_WIDTH)
+    logo_shape = shapely_scale(logo_shape, xfact=1.0, yfact=-1.0, origin=(0.0, 0.0))
     logo_shape = shapely_translate(logo_shape, yoff=CASE_LOGO_CENTER_Y)
     return [
         extrude_polygon(
@@ -479,7 +445,7 @@ def create_case_back_half() -> trimesh.Trimesh:
 
 def create_case_shell() -> trimesh.Trimesh:
     front = orient_mesh_for_print(create_case_front_half())
-    back = orient_mesh_for_print(create_case_back_half())
+    back = orient_mesh_for_print(create_case_back_half(), flip_z=True)
     front.apply_translation([-24.0, 0.0, 0.0])
     back.apply_translation([24.0, 0.0, 0.0])
     return concatenate([front, back])
@@ -541,7 +507,7 @@ def export_part(name: str, mesh: trimesh.Trimesh) -> None:
 
 def main() -> None:
     case_front = orient_mesh_for_print(create_case_front_half())
-    case_back = orient_mesh_for_print(create_case_back_half())
+    case_back = orient_mesh_for_print(create_case_back_half(), flip_z=True)
     export_part("case-shell-front", case_front)
     export_part("case-shell-back", case_back)
     export_part("case-shell", create_case_shell())
