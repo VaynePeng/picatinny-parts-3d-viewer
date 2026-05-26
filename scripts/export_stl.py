@@ -29,9 +29,9 @@ CASE_BACK_HALF_CAVITY_DEPTH = CASE_BACK_HALF_DEPTH - CASE_BACK_FACE_THICKNESS
 CASE_HALF_CAVITY_DEPTH = CASE_FRONT_HALF_CAVITY_DEPTH
 CASE_INTERNAL_DEPTH = CASE_FRONT_HALF_CAVITY_DEPTH + CASE_BACK_HALF_CAVITY_DEPTH
 CASE_FRONT_SPLIT_Z = 0.0
-CASE_USB_CENTER_Y = -13.25
+CASE_USB_CENTER_Y = -12.75
 CASE_USB_WIDTH = 13.0
-CASE_USB_HEIGHT = 4.5
+CASE_USB_HEIGHT = 5.5
 CASE_SCREW_POINTS = (-13.1, 13.1)
 CASE_POST_RADIUS = 2.15
 CASE_SCREW_CLEARANCE_RADIUS = 1.05
@@ -388,9 +388,10 @@ def picatinny_foot_bridges(half_depth: float, z_min: float, width: float = 35.0)
     middle_half = PICATINNY["middle_cavity_width"] / 2
     bevel_size = PICATINNY["bevel_size"]
     opening_half = middle_half - bevel_size
+    outer_chamfer = PICATINNY["outer_chamfer"]
     case_outer_top_y = CASE_OUTER_SIZE / 2
     picatinny_bottom_y = PICATINNY["bottom_y"]
-    foot_outer_half = width / 2
+    foot_outer_half = width / 2 - outer_chamfer
     return [
         extrude_polygon(
             box(-foot_outer_half, case_outer_top_y, -opening_half, picatinny_bottom_y),
