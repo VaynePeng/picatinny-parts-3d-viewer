@@ -62,7 +62,7 @@ PICATINNY = {
     "roof_thickness": 1.0,
     "outer_chamfer": 2.0,
     "depth": 9.0,
-    "bottom_y": 17.5,
+    "bottom_y": 19.0,
 }
 
 
@@ -384,17 +384,25 @@ def apply_picatinny_top(
     )
 
 
-def picatinny_top_seal(half_depth: float, z_min: float) -> trimesh.Trimesh:
+def picatinny_foot_bridges(half_depth: float, z_min: float, width: float = 35.0) -> list[trimesh.Trimesh]:
     middle_half = PICATINNY["middle_cavity_width"] / 2
     bevel_size = PICATINNY["bevel_size"]
     opening_half = middle_half - bevel_size
-    seal_top_y = PICATINNY["bottom_y"] + bevel_size
-    cavity_inner_top_y = CASE_INNER_SIZE / 2
-    return extrude_polygon(
-        box(-opening_half, cavity_inner_top_y, opening_half, seal_top_y),
-        half_depth,
-        z_min=z_min,
-    )
+    case_outer_top_y = CASE_OUTER_SIZE / 2
+    picatinny_bottom_y = PICATINNY["bottom_y"]
+    foot_outer_half = width / 2
+    return [
+        extrude_polygon(
+            box(-foot_outer_half, case_outer_top_y, -opening_half, picatinny_bottom_y),
+            half_depth,
+            z_min=z_min,
+        ),
+        extrude_polygon(
+            box(opening_half, case_outer_top_y, foot_outer_half, picatinny_bottom_y),
+            half_depth,
+            z_min=z_min,
+        ),
+    ]
 
 
 def create_case_front_half() -> trimesh.Trimesh:
@@ -436,8 +444,8 @@ def create_case_front_half() -> trimesh.Trimesh:
             )
 
     body = apply_picatinny_top(outer, depth=CASE_HALF_DEPTH, z_center=CASE_HALF_DEPTH / 2)
-    top_seal = picatinny_top_seal(CASE_HALF_DEPTH, z_min=CASE_FRONT_SPLIT_Z)
-    body = union([body, top_seal])
+    bridges = picatinny_foot_bridges(CASE_HALF_DEPTH, z_min=CASE_FRONT_SPLIT_Z)
+    body = union([body, *bridges])
     body = difference(body, [cavity, front_hole, *screw_holes, *screw_head_recesses])
     return finalize(body)
 
@@ -459,8 +467,8 @@ def create_case_back_half() -> trimesh.Trimesh:
     usb_slot_z_center = (usb_slot_top_z + usb_slot_bottom_z) / 2
     usb_slot = make_box(CASE_USB_WIDTH, CASE_USB_HEIGHT, usb_slot_height, (0.0, CASE_USB_CENTER_Y, usb_slot_z_center))
     shell = apply_picatinny_top(outer, depth=CASE_BACK_HALF_DEPTH, z_center=-CASE_BACK_HALF_DEPTH / 2)
-    top_seal = picatinny_top_seal(CASE_BACK_HALF_DEPTH, z_min=-CASE_BACK_HALF_DEPTH)
-    shell = union([shell, top_seal])
+    bridges = picatinny_foot_bridges(CASE_BACK_HALF_DEPTH, z_min=-CASE_BACK_HALF_DEPTH)
+    shell = union([shell, *bridges])
     shell = difference(shell, [cavity, usb_slot])
 
     posts = []
