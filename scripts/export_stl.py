@@ -14,18 +14,22 @@ from shapely.ops import unary_union
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT / "stl"
 ENGINE = "manifold"
-CASE_OUTER_SIZE = 35.0
+CASE_OUTER_SIZE = 36.0
 CASE_OUTER_RADIUS = 2.2
-CASE_INNER_SIZE = 33.0
+CASE_INNER_SIZE = 34.0
 CASE_INNER_RADIUS = 1.4
-CASE_TOTAL_DEPTH = 9.0
-CASE_HALF_DEPTH = CASE_TOTAL_DEPTH / 2
-CASE_INTERNAL_DEPTH = 7.0
-CASE_HALF_CAVITY_DEPTH = CASE_INTERNAL_DEPTH / 2
-CASE_FRONT_FACE_THICKNESS = 1.0
-CASE_BACK_FACE_THICKNESS = 1.0
+CASE_FRONT_HALF_DEPTH = 6.0
+CASE_BACK_HALF_DEPTH = 5.5
+CASE_HALF_DEPTH = CASE_FRONT_HALF_DEPTH
+CASE_TOTAL_DEPTH = CASE_FRONT_HALF_DEPTH + CASE_BACK_HALF_DEPTH
+CASE_FRONT_FACE_THICKNESS = 1.6
+CASE_BACK_FACE_THICKNESS = 1.6
+CASE_FRONT_HALF_CAVITY_DEPTH = CASE_FRONT_HALF_DEPTH - CASE_FRONT_FACE_THICKNESS
+CASE_BACK_HALF_CAVITY_DEPTH = CASE_BACK_HALF_DEPTH - CASE_BACK_FACE_THICKNESS
+CASE_HALF_CAVITY_DEPTH = CASE_FRONT_HALF_CAVITY_DEPTH
+CASE_INTERNAL_DEPTH = CASE_FRONT_HALF_CAVITY_DEPTH + CASE_BACK_HALF_CAVITY_DEPTH
 CASE_FRONT_SPLIT_Z = 0.0
-CASE_USB_CENTER_Y = -14.25
+CASE_USB_CENTER_Y = -13.25
 CASE_USB_WIDTH = 13.0
 CASE_USB_HEIGHT = 4.5
 CASE_SCREW_POINTS = (-13.1, 13.1)
@@ -44,8 +48,8 @@ CASE_THREAD_MAJOR_RADIUS = 1.0
 CASE_THREAD_MINOR_RADIUS = 0.78
 CASE_THREAD_RADIAL_CLEARANCE = 0.05
 CASE_LOGO_TEXT = "Shotmind"
-CASE_LOGO_HEIGHT = 0.6
-CASE_LOGO_MAIN_TARGET_WIDTH = 22.0
+CASE_LOGO_HEIGHT = 0.8
+CASE_LOGO_MAIN_TARGET_WIDTH = 30.0
 CASE_LOGO_CENTER_Y = 0.0
 CASE_LOGO_FONT_FAMILY = "DejaVu Sans"
 CASE_LOGO_FONT_WEIGHT = "bold"
@@ -156,7 +160,7 @@ def make_logo_meshes() -> list[trimesh.Trimesh]:
         extrude_polygon(
             logo_shape,
             CASE_LOGO_HEIGHT,
-            z_min=-CASE_HALF_DEPTH - CASE_LOGO_HEIGHT,
+            z_min=-CASE_BACK_HALF_DEPTH - CASE_LOGO_HEIGHT,
         )
     ]
 
@@ -380,6 +384,19 @@ def apply_picatinny_top(
     )
 
 
+def picatinny_top_seal(half_depth: float, z_min: float) -> trimesh.Trimesh:
+    middle_half = PICATINNY["middle_cavity_width"] / 2
+    bevel_size = PICATINNY["bevel_size"]
+    opening_half = middle_half - bevel_size
+    case_outer_top_y = CASE_OUTER_SIZE / 2
+    cavity_inner_top_y = CASE_INNER_SIZE / 2
+    return extrude_polygon(
+        box(-opening_half, cavity_inner_top_y, opening_half, case_outer_top_y),
+        half_depth,
+        z_min=z_min,
+    )
+
+
 def create_case_front_half() -> trimesh.Trimesh:
     outer = extrude_polygon(
         rounded_rect(CASE_OUTER_SIZE, CASE_OUTER_SIZE, CASE_OUTER_RADIUS),
@@ -409,12 +426,18 @@ def create_case_front_half() -> trimesh.Trimesh:
                 make_cylinder(
                     CASE_SCREW_HEAD_RADIUS,
                     CASE_SCREW_HEAD_RECESS_DEPTH,
-                    (x, y, CASE_HALF_DEPTH - CASE_SCREW_HEAD_RECESS_DEPTH / 2),
+                    (
+                        x,
+                        y,
+                        CASE_HALF_DEPTH - CASE_SCREW_HEAD_RECESS_DEPTH / 2,
+                    ),
                     sections=64,
                 )
             )
 
     body = apply_picatinny_top(outer, depth=CASE_HALF_DEPTH, z_center=CASE_HALF_DEPTH / 2)
+    top_seal = picatinny_top_seal(CASE_HALF_DEPTH, z_min=CASE_FRONT_SPLIT_Z)
+    body = union([body, top_seal])
     body = difference(body, [cavity, front_hole, *screw_holes, *screw_head_recesses])
     return finalize(body)
 
@@ -422,16 +445,22 @@ def create_case_front_half() -> trimesh.Trimesh:
 def create_case_back_half() -> trimesh.Trimesh:
     outer = extrude_polygon(
         rounded_rect(CASE_OUTER_SIZE, CASE_OUTER_SIZE, CASE_OUTER_RADIUS),
-        CASE_HALF_DEPTH,
-        z_min=-CASE_HALF_DEPTH,
+        CASE_BACK_HALF_DEPTH,
+        z_min=-CASE_BACK_HALF_DEPTH,
     )
     cavity = extrude_polygon(
         rounded_rect(CASE_INNER_SIZE, CASE_INNER_SIZE, CASE_INNER_RADIUS),
-        CASE_HALF_CAVITY_DEPTH,
-        z_min=-CASE_HALF_DEPTH + CASE_BACK_FACE_THICKNESS,
+        CASE_BACK_HALF_CAVITY_DEPTH,
+        z_min=-CASE_BACK_HALF_DEPTH + CASE_BACK_FACE_THICKNESS,
     )
-    usb_slot = make_box(CASE_USB_WIDTH, CASE_USB_HEIGHT, 2.8, (0.0, CASE_USB_CENTER_Y, -3.1))
-    shell = apply_picatinny_top(outer, depth=CASE_HALF_DEPTH, z_center=-CASE_HALF_DEPTH / 2)
+    usb_slot_top_z = -1.7
+    usb_slot_bottom_z = -CASE_BACK_HALF_DEPTH
+    usb_slot_height = usb_slot_top_z - usb_slot_bottom_z
+    usb_slot_z_center = (usb_slot_top_z + usb_slot_bottom_z) / 2
+    usb_slot = make_box(CASE_USB_WIDTH, CASE_USB_HEIGHT, usb_slot_height, (0.0, CASE_USB_CENTER_Y, usb_slot_z_center))
+    shell = apply_picatinny_top(outer, depth=CASE_BACK_HALF_DEPTH, z_center=-CASE_BACK_HALF_DEPTH / 2)
+    top_seal = picatinny_top_seal(CASE_BACK_HALF_DEPTH, z_min=-CASE_BACK_HALF_DEPTH)
+    shell = union([shell, top_seal])
     shell = difference(shell, [cavity, usb_slot])
 
     posts = []
