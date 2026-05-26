@@ -388,10 +388,10 @@ def picatinny_top_seal(half_depth: float, z_min: float) -> trimesh.Trimesh:
     middle_half = PICATINNY["middle_cavity_width"] / 2
     bevel_size = PICATINNY["bevel_size"]
     opening_half = middle_half - bevel_size
-    case_outer_top_y = CASE_OUTER_SIZE / 2
+    seal_top_y = PICATINNY["bottom_y"] + bevel_size
     cavity_inner_top_y = CASE_INNER_SIZE / 2
     return extrude_polygon(
-        box(-opening_half, cavity_inner_top_y, opening_half, case_outer_top_y),
+        box(-opening_half, cavity_inner_top_y, opening_half, seal_top_y),
         half_depth,
         z_min=z_min,
     )
