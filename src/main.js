@@ -100,12 +100,12 @@ let labelsVisible = true
 
 const materials = {
   shell: new THREE.MeshStandardMaterial({
-    color: 0xe8e1d2,
+    color: 0x000000,
     roughness: 0.58,
     metalness: 0.02,
   }),
   shellGhost: new THREE.MeshStandardMaterial({
-    color: 0xe8e1d2,
+    color: 0x000000,
     roughness: 0.48,
     metalness: 0.02,
     transparent: true,
@@ -113,22 +113,22 @@ const materials = {
     depthWrite: false,
   }),
   cut: new THREE.MeshStandardMaterial({
-    color: 0x242424,
+    color: 0x000000,
     roughness: 0.82,
   }),
   rubber: new THREE.MeshStandardMaterial({
-    color: 0x242424,
+    color: 0x000000,
     roughness: 0.72,
   }),
   brass: new THREE.MeshStandardMaterial({
-    color: 0xbe9a52,
+    color: 0x000000,
     metalness: 0.22,
     roughness: 0.38,
   }),
   edge: new THREE.LineBasicMaterial({
-    color: 0x2d2a26,
+    color: 0x000000,
     transparent: true,
-    opacity: 0.35,
+    opacity: 0.5,
   }),
 }
 
