@@ -18,7 +18,7 @@ CASE_OUTER_SIZE = 36.0
 CASE_OUTER_RADIUS = 2.2
 CASE_INNER_SIZE = 34.0
 CASE_INNER_RADIUS = 1.4
-CASE_FRONT_HALF_DEPTH = 6.0
+CASE_FRONT_HALF_DEPTH = 7.5
 CASE_BACK_HALF_DEPTH = 7.0
 CASE_HALF_DEPTH = CASE_FRONT_HALF_DEPTH
 CASE_TOTAL_DEPTH = CASE_FRONT_HALF_DEPTH + CASE_BACK_HALF_DEPTH
@@ -417,7 +417,7 @@ def create_case_front_half() -> trimesh.Trimesh:
         CASE_HALF_CAVITY_DEPTH,
         z_min=CASE_FRONT_SPLIT_Z,
     )
-    front_hole = make_cylinder(8.0, CASE_HALF_DEPTH + 2.0, (0.0, 0.0, CASE_HALF_DEPTH / 2), sections=128)
+    front_hole = make_cylinder(7.75, CASE_HALF_DEPTH + 2.0, (0.0, 0.0, CASE_HALF_DEPTH / 2), sections=128)
 
     screw_holes = []
     screw_head_recesses = []
