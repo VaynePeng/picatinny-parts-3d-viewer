@@ -34,6 +34,9 @@ CASE_USB_WIDTH = 13.0
 CASE_USB_HEIGHT = 5.5
 CASE_SCREW_POINTS = (-14.1, 14.1)
 CASE_POST_RADIUS = 2.15
+CASE_FRONT_POST_RADIUS = 2.5
+CASE_FRONT_SCREW_BORE_RADIUS = 2.2
+CASE_FRONT_SCREW_TIP_LENGTH = 1.6
 CASE_SCREW_CLEARANCE_RADIUS = 1.05
 CASE_SCREW_HEAD_RADIUS = 2.2
 CASE_SCREW_HEAD_RECESS_DEPTH = 0.6
@@ -420,36 +423,35 @@ def create_case_front_half() -> trimesh.Trimesh:
     front_hole = make_cylinder(7.75, CASE_HALF_DEPTH + 2.0, (0.0, 0.0, CASE_HALF_DEPTH / 2), sections=128)
 
     posts = []
-    screw_holes = []
-    screw_head_recesses = []
+    bore_holes = []
+    tip_holes = []
+    bore_length = CASE_HALF_DEPTH - CASE_FRONT_SCREW_TIP_LENGTH
+    bore_z_center = CASE_FRONT_SCREW_TIP_LENGTH + bore_length / 2
+    tip_z_center = CASE_FRONT_SCREW_TIP_LENGTH / 2
     for x in CASE_SCREW_POINTS:
         for y in CASE_SCREW_POINTS:
             posts.append(
                 make_cylinder(
-                    CASE_POST_RADIUS,
+                    CASE_FRONT_POST_RADIUS,
                     CASE_HALF_DEPTH,
                     (x, y, CASE_HALF_DEPTH / 2),
                     sections=64,
                 )
             )
-            screw_holes.append(
+            bore_holes.append(
                 make_cylinder(
-                    CASE_SCREW_CLEARANCE_RADIUS,
-                    CASE_HALF_DEPTH + 0.6,
-                    (x, y, CASE_HALF_DEPTH / 2 + 0.3),
-                    sections=48,
+                    CASE_FRONT_SCREW_BORE_RADIUS,
+                    bore_length + 0.6,
+                    (x, y, bore_z_center + 0.3),
+                    sections=64,
                 )
             )
-            screw_head_recesses.append(
+            tip_holes.append(
                 make_cylinder(
-                    CASE_SCREW_HEAD_RADIUS,
-                    CASE_SCREW_HEAD_RECESS_DEPTH,
-                    (
-                        x,
-                        y,
-                        CASE_HALF_DEPTH - CASE_SCREW_HEAD_RECESS_DEPTH / 2,
-                    ),
-                    sections=64,
+                    CASE_SCREW_CLEARANCE_RADIUS,
+                    CASE_FRONT_SCREW_TIP_LENGTH + 0.4,
+                    (x, y, tip_z_center - 0.2),
+                    sections=48,
                 )
             )
 
@@ -458,7 +460,7 @@ def create_case_front_half() -> trimesh.Trimesh:
     body = union([body, *bridges])
     body = difference(body, [cavity, front_hole])
     body = union([body, *posts])
-    body = difference(body, [*screw_holes, *screw_head_recesses])
+    body = difference(body, [*bore_holes, *tip_holes])
     return finalize(body)
 
 
