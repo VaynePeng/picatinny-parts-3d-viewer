@@ -419,15 +419,24 @@ def create_case_front_half() -> trimesh.Trimesh:
     )
     front_hole = make_cylinder(7.75, CASE_HALF_DEPTH + 2.0, (0.0, 0.0, CASE_HALF_DEPTH / 2), sections=128)
 
+    posts = []
     screw_holes = []
     screw_head_recesses = []
     for x in CASE_SCREW_POINTS:
         for y in CASE_SCREW_POINTS:
+            posts.append(
+                make_cylinder(
+                    CASE_POST_RADIUS,
+                    CASE_HALF_DEPTH,
+                    (x, y, CASE_HALF_DEPTH / 2),
+                    sections=64,
+                )
+            )
             screw_holes.append(
                 make_cylinder(
                     CASE_SCREW_CLEARANCE_RADIUS,
-                    CASE_FRONT_FACE_THICKNESS + 0.6,
-                    (x, y, CASE_HALF_DEPTH - CASE_FRONT_FACE_THICKNESS / 2),
+                    CASE_HALF_DEPTH + 0.6,
+                    (x, y, CASE_HALF_DEPTH / 2 + 0.3),
                     sections=48,
                 )
             )
@@ -447,7 +456,9 @@ def create_case_front_half() -> trimesh.Trimesh:
     body = apply_picatinny_top(outer, depth=CASE_HALF_DEPTH, z_center=CASE_HALF_DEPTH / 2)
     bridges = picatinny_foot_bridges(CASE_HALF_DEPTH, z_min=CASE_FRONT_SPLIT_Z)
     body = union([body, *bridges])
-    body = difference(body, [cavity, front_hole, *screw_holes, *screw_head_recesses])
+    body = difference(body, [cavity, front_hole])
+    body = union([body, *posts])
+    body = difference(body, [*screw_holes, *screw_head_recesses])
     return finalize(body)
 
 
