@@ -420,7 +420,7 @@ def create_case_front_half() -> trimesh.Trimesh:
         CASE_HALF_CAVITY_DEPTH,
         z_min=CASE_FRONT_SPLIT_Z,
     )
-    front_hole = make_cylinder(7.75, CASE_HALF_DEPTH + 2.0, (0.0, 0.0, CASE_HALF_DEPTH / 2), sections=128)
+    front_hole = make_cylinder(8.0, CASE_HALF_DEPTH + 2.0, (0.0, 0.0, CASE_HALF_DEPTH / 2), sections=128)
 
     posts = []
     bore_holes = []
