@@ -420,7 +420,8 @@ def create_case_front_half() -> trimesh.Trimesh:
         CASE_HALF_CAVITY_DEPTH,
         z_min=CASE_FRONT_SPLIT_Z,
     )
-    front_hole = make_cylinder(8.0, CASE_HALF_DEPTH + 2.0, (0.0, 0.0, CASE_HALF_DEPTH / 2), sections=128)
+    front_hole = make_cylinder(8.0, CASE_HALF_DEPTH + 12.0 + 2.0, (0.0, 0.0, (CASE_HALF_DEPTH + 12.0) / 2), sections=128)
+    front_lens_tube = make_cylinder(9.6, 12.0, (0.0, 0.0, CASE_HALF_DEPTH + 6.0), sections=128)
 
     posts = []
     bore_holes = []
@@ -457,7 +458,7 @@ def create_case_front_half() -> trimesh.Trimesh:
 
     body = apply_picatinny_top(outer, depth=CASE_HALF_DEPTH, z_center=CASE_HALF_DEPTH / 2)
     bridges = picatinny_foot_bridges(CASE_HALF_DEPTH, z_min=CASE_FRONT_SPLIT_Z)
-    body = union([body, *bridges])
+    body = union([body, *bridges, front_lens_tube])
     body = difference(body, [cavity, front_hole])
     body = union([body, *posts])
     body = difference(body, [*bore_holes, *tip_holes])
